@@ -21,6 +21,37 @@
   </p>
 </p>
 
+> [!IMPORTANT]
+> **Notice:** This is a fork of the [original Ghostty repo](https://github.com/ghostty-org/ghostty) with a terminal badge overlay feature.
+
+### Badge Feature
+
+![alt text](image.png)
+
+Shows a text overlay in the top-right corner of the terminal with the current directory name (or custom text). Fully configurable with glow support.
+
+**Config** (`~/.config/ghostty/config`):
+```
+badge = true
+badge-color = #ffffff
+badge-opacity = 1.0
+badge-size = 1.0
+badge-glow = false
+badge-glow-color = #ffffff
+badge-glow-radius = 4.0
+```
+
+**Keybindings:**
+```
+keybind = super+b=set_badge_text:my-project
+keybind = super+shift+b=reset_badge_text
+```
+
+**Build:**
+```sh
+zig build -Doptimize=ReleaseFast
+```
+
 ## About
 
 Ghostty is a terminal emulator that differentiates itself by being

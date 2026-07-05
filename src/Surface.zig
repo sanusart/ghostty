@@ -5161,6 +5161,39 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             );
         },
 
+        .set_badge_text => |v| {
+            {
+                self.renderer_state.mutex.lock();
+                defer self.renderer_state.mutex.unlock();
+
+                // Free any existing badge text
+                if (self.renderer_state.badge_text) |old| {
+                    self.alloc.free(old);
+                }
+
+                self.renderer_state.badge_text = if (v.len > 0)
+                    try self.alloc.dupe(u8, v)
+                else
+                    null;
+
+                try self.queueRender();
+            }
+        },
+
+        .reset_badge_text => {
+            {
+                self.renderer_state.mutex.lock();
+                defer self.renderer_state.mutex.unlock();
+
+                if (self.renderer_state.badge_text) |old| {
+                    self.alloc.free(old);
+                    self.renderer_state.badge_text = null;
+                }
+
+                try self.queueRender();
+            }
+        },
+
         .clear_screen => {
             // This is a duplicate of some of the logic in termio.clearScreen
             // but we need to do this here so we can know the answer before

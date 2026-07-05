@@ -9,6 +9,7 @@ const GraphicsAPI = Renderer.API;
 const Texture = GraphicsAPI.Texture;
 const CellSize = @import("size.zig").CellSize;
 const Overlay = @import("Overlay.zig");
+const Badge = @import("Badge.zig").Badge;
 
 const log = std.log.scoped(.renderer_image);
 
@@ -36,6 +37,9 @@ pub const State = struct {
     /// Overlays
     overlay_placements: std.ArrayListUnmanaged(Placement),
 
+    /// Badge placements
+    badge_placements: std.ArrayListUnmanaged(Placement),
+
     pub const empty: State = .{
         .images = .empty,
         .kitty_placements = .empty,
@@ -43,6 +47,7 @@ pub const State = struct {
         .kitty_text_end = 0,
         .kitty_virtual = false,
         .overlay_placements = .empty,
+        .badge_placements = .empty,
     };
 
     pub fn deinit(self: *State, alloc: Allocator) void {
@@ -53,6 +58,7 @@ pub const State = struct {
         }
         self.kitty_placements.deinit(alloc);
         self.overlay_placements.deinit(alloc);
+        self.badge_placements.deinit(alloc);
     }
 
     /// Upload any images to the GPU that need to be uploaded,
@@ -95,6 +101,7 @@ pub const State = struct {
         kitty_below_text,
         kitty_above_text,
         overlay,
+        badge,
     };
 
     /// Draw the given named set of placements.
@@ -113,6 +120,7 @@ pub const State = struct {
             .kitty_below_text => self.kitty_placements.items[self.kitty_bg_end..self.kitty_text_end],
             .kitty_above_text => self.kitty_placements.items[self.kitty_text_end..],
             .overlay => self.overlay_placements.items,
+            .badge => self.badge_placements.items,
         };
 
         for (placements) |p| {
@@ -229,6 +237,56 @@ pub const State = struct {
         });
     }
 
+    /// Update the badge image. Null value deletes any existing badge.
+    /// `x_px` and `y_px` are the pixel position of the top-left corner
+    /// of the badge relative to the terminal grid area. `cell_w` and
+    /// `cell_h` are the cell dimensions in pixels.
+    pub fn badgeUpdate(
+        self: *State,
+        alloc: Allocator,
+        badge_: ?*const Badge,
+        x_px: u32,
+        y_px: u32,
+        cell_w: u32,
+        cell_h: u32,
+    ) !void {
+        const badge = badge_ orelse {
+            if (self.images.getPtr(.badge)) |data| {
+                data.image.markForUnload();
+            }
+            return;
+        };
+
+        const pending = badge.pendingImage() orelse return;
+
+        const generation = terminal.kitty.graphics.nextGeneration();
+
+        self.badge_placements.clearRetainingCapacity();
+        try self.badge_placements.ensureUnusedCapacity(alloc, 1);
+
+        try self.prepImage(alloc, .badge, generation, pending);
+
+        const grid_x: i32 = @intCast(x_px / cell_w);
+        const grid_y: i32 = @intCast(y_px / cell_h);
+        const offset_x: u32 = x_px - @as(u32, @intCast(grid_x)) * cell_w;
+        const offset_y: u32 = y_px - @as(u32, @intCast(grid_y)) * cell_h;
+
+        self.badge_placements.appendAssumeCapacity(.{
+            .image_id = .badge,
+            .x = grid_x,
+            .y = grid_y,
+            .z = 100,
+            .width = pending.width,
+            .height = pending.height,
+            .cell_offset_x = offset_x,
+            .cell_offset_y = offset_y,
+            .source_x = 0,
+            .source_y = 0,
+            .source_width = pending.width,
+            .source_height = pending.height,
+        });
+    }
+
     /// Returns true if the Kitty graphics state requires an update based
     /// on the terminal state and our internal state.
     ///
@@ -281,6 +339,7 @@ pub const State = struct {
                     },
 
                     .overlay => {},
+                    .badge => {},
                 }
             }
         }
@@ -661,6 +720,9 @@ pub const Id = union(enum) {
     /// image for now. In the future we can support layers here if we want.
     overlay,
 
+    /// Terminal badge (directory indicator).
+    badge,
+
     /// Z-ordering tie-breaker for images with the same z value.
     pub fn zLessThan(lhs: Id, rhs: Id) bool {
         // If our tags aren't the same, we sort by tag.
@@ -670,6 +732,7 @@ pub const Id = union(enum) {
                 .kitty => true,
 
                 .overlay => false,
+                .badge => false,
             };
         }
 
@@ -681,6 +744,7 @@ pub const Id = union(enum) {
 
             // No sensical ordering
             .overlay => return false,
+            .badge => return false,
         }
     }
 };

@@ -157,6 +157,28 @@ pub fn Context(comptime T: type) type {
                 ty,
             );
         }
+
+        pub fn setShadow(self: *T, offset: graphics.Size, blur: f64) void {
+            c.CGContextSetShadow(
+                @ptrCast(self),
+                @bitCast(offset),
+                blur,
+            );
+        }
+
+        pub fn setShadowWithColor(
+            self: *T,
+            offset: graphics.Size,
+            blur: f64,
+            color: *anyopaque,
+        ) void {
+            c.CGContextSetShadowWithColor(
+                @ptrCast(self),
+                @bitCast(offset),
+                blur,
+                @ptrCast(color),
+            );
+        }
     };
 }
 
