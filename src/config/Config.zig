@@ -1018,6 +1018,36 @@ palette: Palette = .{},
 /// Available since: 1.2.0
 @"background-opacity-cells": bool = false,
 
+/// Shows a badge in the top-right corner of the terminal. When set to
+/// `true`, the current working directory name is shown. If no pwd is
+/// available, the badge is not shown.
+///
+/// The badge is rendered as overlay text in the top-right of the terminal.
+badge: bool = false,
+
+/// The color of the badge text when `badge` is enabled. This can be
+/// specified as a hex value (`#RRGGBB` or `RRGGBB`) or a named X11 color.
+/// Defaults to the terminal foreground color.
+@"badge-color": Color = .{ .r = 255, .g = 255, .b = 255 },
+
+/// The opacity of the badge text when `badge` is enabled. A value of
+/// 1 is fully opaque and a value of 0 is fully transparent.
+@"badge-opacity": f64 = 1.0,
+
+/// The size of the badge text as a multiplier of the cell height.
+/// A value of 1.0 means the badge font size matches the cell height.
+@"badge-size": f64 = 1.0,
+
+/// Whether to show a glow effect behind the badge text.
+@"badge-glow": bool = false,
+
+/// The blur radius of the badge text glow in pixels.
+@"badge-glow-radius": f64 = 4.0,
+
+/// The color of the badge text glow when `badge-glow` is enabled.
+/// Defaults to white which creates a bright halo on dark backgrounds.
+@"badge-glow-color": Color = .{ .r = 255, .g = 255, .b = 255 },
+
 /// Whether to blur the background when `background-opacity` is less than 1.
 ///
 /// Valid values are:

@@ -30,6 +30,10 @@ preedit: ?Preedit = null,
 /// need about the mouse.
 mouse: Mouse = .{},
 
+/// Custom badge text override. If set, this overrides the PWD-based
+/// badge text. Null means to use the PWD basename.
+badge_text: ?[]const u8 = null,
+
 pub const Mouse = struct {
     /// The point on the viewport where the mouse currently is. We use
     /// viewport points to avoid the complexity of mapping the mouse to

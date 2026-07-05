@@ -47,6 +47,7 @@ pub const BackgroundImagePosition = Config.BackgroundImagePosition;
 pub const BackgroundImageFit = Config.BackgroundImageFit;
 pub const LinkPreviews = Config.LinkPreviews;
 pub const WorkingDirectory = Config.WorkingDirectory;
+pub const Color = Config.Color;
 
 // Alternate APIs
 pub const CApi = @import("config/CApi.zig");

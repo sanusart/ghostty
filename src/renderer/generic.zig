@@ -18,7 +18,9 @@ const constraintWidth = cellpkg.constraintWidth;
 const isCovering = cellpkg.isCovering;
 const rowNeverExtendBg = @import("row.zig").neverExtendBg;
 const Overlay = @import("Overlay.zig");
+const Badge = @import("Badge.zig").Badge;
 const imagepkg = @import("image.zig");
+
 const ImageState = imagepkg.State;
 const shadertoy = @import("shadertoy.zig");
 const assert = @import("../quirks.zig").inlineAssert;
@@ -230,6 +232,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
         /// Our overlay state, if any.
         overlay: ?Overlay = null,
+
+        /// Our rendered badge image.
+        badge: Badge = .{},
+
+        /// The text currently shown in the badge.
+        badge_text: ?[]const u8 = null,
 
         const HighlightTag = enum(u8) {
             search_match,
@@ -570,6 +578,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             blending: configpkg.Config.AlphaBlending,
             background_blur: configpkg.Config.BackgroundBlur,
             scroll_to_bottom_on_output: bool,
+            badge: bool,
+            badge_color: configpkg.Color,
+            badge_opacity: f64,
+            badge_size: f64,
+            badge_glow: bool,
+            badge_glow_radius: f64,
+            badge_glow_color: configpkg.Color,
 
             pub fn init(
                 alloc_gpa: Allocator,
@@ -644,6 +659,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .blending = config.@"alpha-blending",
                     .background_blur = config.@"background-blur",
                     .scroll_to_bottom_on_output = config.@"scroll-to-bottom".output,
+                    .badge = config.badge,
+                    .badge_color = config.@"badge-color",
+                    .badge_opacity = config.@"badge-opacity",
+                    .badge_size = config.@"badge-size",
+                    .badge_glow = config.@"badge-glow",
+                    .badge_glow_radius = config.@"badge-glow-radius",
+                    .badge_glow_color = config.@"badge-glow-color",
                     .arena = arena,
                 };
             }
@@ -799,6 +821,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
         pub fn deinit(self: *Self) void {
             if (self.overlay) |*overlay| overlay.deinit(self.alloc);
+            self.badge.deinit(self.alloc);
             self.terminal_state.deinit(self.alloc);
             if (self.search_selected_match) |*m| m.arena.deinit();
             if (self.search_matches) |*m| m.arena.deinit();
@@ -1159,6 +1182,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 preedit: ?renderer.State.Preedit,
                 scrollbar: terminal.Scrollbar,
                 overlay_features: []const Overlay.Feature,
+                pwd: ?[]const u8,
+                badge_text: ?[]const u8,
             };
 
             // Update all our data as tightly as possible within the mutex.
@@ -1270,12 +1295,26 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     ) catch &.{};
                 };
 
+                // Get the terminal pwd for badge rendering.
+                const pwd: ?[]const u8 = pwd: {
+                    const terminal_pwd = state.terminal.getPwd() orelse break :pwd null;
+                    break :pwd try arena_alloc.dupe(u8, terminal_pwd);
+                };
+
+                // Get the custom badge text override from render state.
+                const badge_text: ?[]const u8 = badge_text: {
+                    const t = state.badge_text orelse break :badge_text null;
+                    break :badge_text try arena_alloc.dupe(u8, t);
+                };
+
                 break :critical .{
                     .links = links,
                     .mouse = state.mouse,
                     .preedit = preedit,
                     .scrollbar = scrollbar,
                     .overlay_features = overlay_features,
+                    .pwd = pwd,
+                    .badge_text = badge_text,
                 };
             };
 
@@ -1413,6 +1452,109 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 ) catch |err| {
                     log.warn("error updating overlay images err={}", .{err});
                 };
+
+                // Render and upload our badge image.
+                if (self.config.badge) {
+                    // Determine the badge text: custom text or pwd basename.
+                    const badge_text: ?[]const u8 = badge_text: {
+                        if (critical.badge_text) |t| break :badge_text t;
+                        const pwd = critical.pwd orelse break :badge_text null;
+                        const basename = std.fs.path.basename(pwd);
+                        if (basename.len == 0) break :badge_text null;
+                        break :badge_text basename;
+                    };
+
+                    // Always re-render the badge when there's text, so config
+                    // changes (color, opacity, size) take effect immediately.
+                    if (self.badge_text) |prev| {
+                        self.alloc.free(@constCast(prev));
+                        self.badge_text = null;
+                    }
+                    self.badge.deinit(self.alloc);
+                    self.badge = .{};
+
+                    if (badge_text) |t| {
+                        const font_size = @as(f64, @floatFromInt(self.grid_metrics.cell_height)) * self.config.badge_size;
+
+                        const font_family: []const u8 = "Menlo";
+
+                        if (Badge.render(
+                            self.alloc,
+                            t,
+                            font_family,
+                            font_size,
+                            self.config.badge_color.r,
+                            self.config.badge_color.g,
+                            self.config.badge_color.b,
+                            self.config.badge_opacity,
+                            self.config.badge_glow,
+                            self.config.badge_glow_radius,
+                            self.config.badge_glow_color.r,
+                            self.config.badge_glow_color.g,
+                            self.config.badge_glow_color.b,
+                        )) |badge| {
+                            self.badge = badge;
+                        } else |err| {
+                            log.warn("error rendering badge err={}", .{err});
+                        }
+
+                        self.badge_text = self.alloc.dupe(u8, t) catch |err| blk: {
+                            log.warn("error duplicating badge text err={}", .{err});
+                            break :blk null;
+                        };
+                    }
+
+                    // Upload the badge image.
+                    const term_size = self.size.terminal();
+                    const badge_pending = self.badge.pendingImage();
+                    if (badge_pending) |pending| {
+                        const padding: u32 = @intFromFloat(
+                            @as(f64, @floatFromInt(self.grid_metrics.cell_width)) * 0.5,
+                        );
+                        const x_px = (term_size.width -| pending.width) -| padding;
+                        const y_px: u32 = padding;
+                        self.images.badgeUpdate(
+                            self.alloc,
+                            if (self.badge.width > 0) &self.badge else null,
+                            x_px,
+                            y_px,
+                            self.grid_metrics.cell_width,
+                            self.grid_metrics.cell_height,
+                        ) catch |err| {
+                            log.warn("error updating badge image err={}", .{err});
+                        };
+                    } else {
+                        // No badge to show, remove any existing badge image.
+                        self.images.badgeUpdate(
+                            self.alloc,
+                            null,
+                            0,
+                            0,
+                            0,
+                            0,
+                        ) catch |err| {
+                            log.warn("error removing badge image err={}", .{err});
+                        };
+                    }
+                } else {
+                    // Badge disabled, remove any existing badge image.
+                    self.images.badgeUpdate(
+                        self.alloc,
+                        null,
+                        0,
+                        0,
+                        0,
+                        0,
+                    ) catch |err| {
+                        log.warn("error removing badge image err={}", .{err});
+                    };
+                    if (self.badge_text) |prev| {
+                        self.alloc.free(@constCast(prev));
+                        self.badge_text = null;
+                    }
+                    self.badge.deinit(self.alloc);
+                    self.badge = .{};
+                }
 
                 // Update custom shader uniforms that depend on terminal state.
                 self.updateCustomShaderUniformsFromState();
@@ -1686,6 +1828,14 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     self.shaders.pipelines.image,
                     &pass,
                     .overlay,
+                );
+
+                // Badge overlay.
+                self.images.draw(
+                    &self.api,
+                    self.shaders.pipelines.image,
+                    &pass,
+                    .badge,
                 );
             }
 
