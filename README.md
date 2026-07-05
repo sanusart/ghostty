@@ -22,7 +22,7 @@
 </p>
 
 > [!IMPORTANT]
-> **Notice:** This is a fork of the [original Ghostty repo](https://github.com/ghostty-org/ghostty) with a terminal badge overlay feature.
+> **Notice:** This is a fork of the [original Ghostty repo](https://github.com/ghostty-org/ghostty) with a terminal badge like in iTerm2 overlay feature with text and emoji support.
 
 ### Badge Feature
 
