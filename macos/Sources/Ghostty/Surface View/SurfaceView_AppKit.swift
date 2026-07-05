@@ -1609,6 +1609,12 @@ extension Ghostty {
             item.setImageIfDesired(systemSymbolName: "pencil.line")
             item = menu.addItem(withTitle: "Change Terminal Title...", action: #selector(changeTitle(_:)), keyEquivalent: "")
 
+            menu.addItem(.separator())
+            item = menu.addItem(withTitle: "Set Badge Text...", action: #selector(setBadgeText(_:)), keyEquivalent: "")
+            item.setImageIfDesired(systemSymbolName: "character.cursor.ibeam")
+            item = menu.addItem(withTitle: "Reset Badge", action: #selector(resetBadge(_:)), keyEquivalent: "")
+            item.setImageIfDesired(systemSymbolName: "clear")
+
             return menu
         }
 
@@ -1740,6 +1746,37 @@ extension Ghostty {
 
         @IBAction func changeTitle(_ sender: Any) {
             promptTitle()
+        }
+
+        @IBAction func setBadgeText(_ sender: Any) {
+            guard let surface = self.surface else { return }
+
+            let alert = NSAlert()
+            alert.messageText = "Set Badge Text"
+            alert.informativeText = "Enter custom text for the terminal badge:"
+            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: "Cancel")
+
+            let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+            textField.placeholderString = "Badge text"
+            alert.accessoryView = textField
+
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn else { return }
+
+            let text = textField.stringValue
+            let action = "set_badge_text:\(text)"
+            if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
+            }
+        }
+
+        @IBAction func resetBadge(_ sender: Any) {
+            guard let surface = self.surface else { return }
+            let action = "reset_badge_text"
+            if !ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8))) {
+                AppDelegate.logger.warning("action failed action=\(action, privacy: .public)")
+            }
         }
 
         /// Show a user notification and associate it with this surface

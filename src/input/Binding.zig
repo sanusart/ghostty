@@ -612,6 +612,15 @@ pub const Action = union(enum) {
     /// If the title is empty, the tab title override is cleared.
     set_tab_title: []const u8,
 
+    /// Set the badge text for the surface. The badge is rendered as
+    /// a text overlay in the top-right corner of the terminal window.
+    /// If the text is empty, the badge is hidden.
+    set_badge_text: []const u8,
+
+    /// Reset the badge text to show the basename of the current
+    /// working directory.
+    reset_badge_text,
+
     /// Create a new split in the specified direction.
     ///
     /// Valid arguments:
@@ -1372,6 +1381,8 @@ pub const Action = union(enum) {
             .prompt_tab_title,
             .set_surface_title,
             .set_tab_title,
+            .set_badge_text,
+            .reset_badge_text,
             .clear_screen,
             .select_all,
             .scroll_to_top,
